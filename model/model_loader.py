@@ -1,15 +1,27 @@
-import torch
+import logging
+
 from ultralytics import YOLO
 
-# Path model (sesuaikan dengan lokasi modelmu)
-model_path = 'model/speciesv4.pt'
+from config.settings import settings
 
-def load_model():
-    # Load model menggunakan YOLO dari Ultralytics
-    model = YOLO(model_path)
-    model.eval()  # Set model ke evaluasi mode (non-training mode)
-    return model
+logger = logging.getLogger(__name__)
 
-# Coba memuat model
-model = load_model()
-print("Model berhasil dimuat:", model)
+_model = None
+
+
+def load_model() -> YOLO:
+    global _model
+    if _model is None:
+        logger.info("Loading model from %s", settings.model_path)
+        _model = YOLO(settings.model_path)
+        _model.eval()
+        logger.info("Model loaded successfully")
+    return _model
+
+
+def get_model() -> YOLO:
+    return load_model()
+
+
+def is_model_loaded() -> bool:
+    return _model is not None

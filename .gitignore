@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+.env.local
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model weights (large files — provide separately)
+model/*.pt
+
+# Logs & uploads
+*.log
+uploads/
+test_image.jpg
+
+# Docker
+.docker/
+
+# Jupyter
+.ipynb_checkpoints/

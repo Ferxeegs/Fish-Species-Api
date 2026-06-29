@@ -1,9 +1,5 @@
-from ultralytics import YOLO
+from model.model_loader import load_model
 
-model_path = "model/speciesv4.pt"  # Sesuaikan path model kamu
-
-# Load model menggunakan Ultralytics API
-model = YOLO(model_path)
-
-# Periksa apakah model berhasil dimuat
-print("Model berhasil dimuat:", model)
+if __name__ == "__main__":
+    model = load_model()
+    print("Model berhasil dimuat:", model)

@@ -1,43 +1,130 @@
-from flask import Flask, request, jsonify
-from routes.predict import predict_image
 import logging
 
-# Setup logging untuk debugging
-logging.basicConfig(level=logging.DEBUG)
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.exceptions import RequestEntityTooLarge
 
-app = Flask(__name__)
+from config.settings import settings
+from model.model_loader import is_model_loaded, load_model
+from routes.predict import predict_image
+from utils.auth import require_api_key
+from utils.validators import validate_image_upload
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    app.logger.info("Start /predict route")  # Log untuk memulai proses prediksi
+logger = logging.getLogger(__name__)
 
-    # Memeriksa apakah gambar ada dalam request
-    if 'image' not in request.files:
-        app.logger.error('No image part in the request')  # Log jika tidak ada bagian gambar
-        return jsonify({'success': False, 'message': 'No image provided'}), 400
+from config.settings import settings
 
-    image = request.files['image']
-    
-    # Log nama file gambar yang diterima
-    app.logger.info(f"Received image: {image.filename}")
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=settings.rate_limit_storage_uri,
+    default_limits=[],
+)
 
-    # Cek apakah file gambar ada
-    if image.filename == '':
-        app.logger.error('No selected file')  # Log jika tidak ada file yang dipilih
-        return jsonify({'success': False, 'message': 'No selected file'}), 400
+
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+
+
+def create_app() -> Flask:
+    settings.validate()
+
+    _configure_logging()
+
+    app = Flask(__name__)
+    app.config["SECRET_KEY"] = settings.secret_key or "dev-only-change-me"
+    app.config["MAX_CONTENT_LENGTH"] = settings.max_upload_bytes
+
+    if settings.cors_origins:
+        CORS(app, resources={r"/*": {"origins": settings.cors_origins}})
+
+    limiter.init_app(app)
+
+    @app.after_request
+    def set_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Cache-Control"] = "no-store"
+        if settings.is_production:
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+        return response
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def handle_payload_too_large(_error):
+        return jsonify(
+            {
+                "success": False,
+                "message": f"File exceeds maximum size of {settings.max_upload_size_mb} MB",
+            }
+        ), 413
+
+    @app.errorhandler(429)
+    def handle_rate_limit(_error):
+        return jsonify(
+            {"success": False, "message": "Rate limit exceeded. Try again later."}
+        ), 429
+
+    @app.errorhandler(500)
+    def handle_internal_error(_error):
+        logger.exception("Unhandled server error")
+        return jsonify({"success": False, "message": "Internal server error"}), 500
+
+    @app.route("/health", methods=["GET"])
+    def health():
+        return jsonify({"status": "ok"}), 200
+
+    @app.route("/ready", methods=["GET"])
+    def ready():
+        if not is_model_loaded():
+            return jsonify({"status": "not_ready", "model_loaded": False}), 503
+        return jsonify({"status": "ready", "model_loaded": True}), 200
+
+    @app.route("/predict", methods=["POST"])
+    @limiter.limit(settings.rate_limit)
+    @require_api_key
+    def predict():
+        if "image" not in request.files:
+            return jsonify({"success": False, "message": "No image provided"}), 400
+
+        image = request.files["image"]
+        _, error = validate_image_upload(
+            image,
+            allowed_extensions=settings.allowed_extensions,
+            max_bytes=settings.max_upload_bytes,
+        )
+        if error:
+            return jsonify({"success": False, "message": error}), 400
+
+        try:
+            result = predict_image(image)
+            return jsonify({"success": True, "predictions": result})
+        except Exception:
+            logger.exception("Prediction failed")
+            return jsonify({"success": False, "message": "Error processing image"}), 500
 
     try:
-        app.logger.info('Processing image with predict_bp...')  # Log sebelum memproses gambar
-        result = predict_image(image)
-        # Log hasil prediksi
-        app.logger.info(f"Prediction result: {result}")
-        
-        return jsonify(result)
+        load_model()
+    except Exception:
+        logger.exception("Failed to load model at startup")
+        if settings.is_production:
+            raise
 
-    except Exception as e:
-        # Log jika ada error saat pemrosesan
-        app.logger.error(f"Error processing image: {str(e)}")
-        return jsonify({'success': False, 'message': f"Error processing image: {str(e)}"}), 500
+    return app
+
+
+app = create_app()
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(
+        host=settings.flask_host,
+        port=settings.flask_port,
+        debug=settings.flask_debug,
+    )

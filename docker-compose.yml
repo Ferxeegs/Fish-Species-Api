@@ -1,0 +1,30 @@
+services:
+  api:
+    build: .
+    container_name: fish-species-api
+    ports:
+      - "${FLASK_PORT:-5000}:5000"
+    env_file:
+      - .env
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: "false"
+      HOME: /tmp
+      YOLO_CONFIG_DIR: /tmp
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/ready')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s

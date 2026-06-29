@@ -1,8 +1,9 @@
 Flask
-torch==2.1.0+cpu
-torchvision==0.16.0
+gunicorn
+python-dotenv
+flask-cors
+flask-limiter
 ultralytics
 numpy<2.0
 pillow
 opencv-python
-
