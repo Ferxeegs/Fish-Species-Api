@@ -1,9 +1,7 @@
 services:
   api:
     build: .
-    container_name: fish-species-api
-    ports:
-      - "127.0.0.1:${FLASK_PORT:-5000}:5000"
+    container_name: fish_species_api
     env_file:
       - .env
     environment:
@@ -17,6 +15,8 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    networks:
+      - app-bridge
     deploy:
       resources:
         limits:
@@ -28,3 +28,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 90s
+
+networks:
+  app-bridge:
+    external: true

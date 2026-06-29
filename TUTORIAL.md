@@ -359,33 +359,48 @@ docker compose logs -f
 docker compose down
 ```
 
-API tersedia di `http://127.0.0.1:5000` (hanya localhost; gunakan Nginx untuk akses publik).
+### Nginx Global Gateway (conf.d)
 
-### Nginx Reverse Proxy (server production)
+Pola sama dengan stack lain di server (mis. purchasing-go): gateway Nginx join jaringan Docker `app-bridge` dan proxy ke `container_name`.
 
-File konfigurasi tersedia di folder `nginx/`:
-
-| File | Kegunaan |
-|------|----------|
-| `nginx/fish-species-api.conf` | HTTPS + redirect HTTP (production) |
-| `nginx/fish-species-api.http.conf` | HTTP saja (sebelum SSL) |
+File: `nginx/fish-species-api.conf`
 
 ```bash
-# Salin ke Nginx global
-sudo cp nginx/fish-species-api.conf /etc/nginx/sites-available/fish-species-api.conf
+# 1. Pastikan jaringan app-bridge sudah ada
+docker network create app-bridge 2>/dev/null || true
 
-# Edit server_name dan path SSL
-sudo nano /etc/nginx/sites-available/fish-species-api.conf
+# 2. Pastikan container Nginx global sudah join app-bridge
+docker network connect app-bridge <nama-container-nginx-global>
 
-# Aktifkan
-sudo ln -sf /etc/nginx/sites-available/fish-species-api.conf /etc/nginx/sites-enabled/
+# 3. Jalankan stack API
+docker compose up -d --build
+
+# 4. Salin config ke gateway
+sudo cp nginx/fish-species-api.conf /etc/nginx/conf.d/fish-species-api.conf
+
+# 5. Edit server_name (default: fish-species.ferxcode.my.id)
+sudo nano /etc/nginx/conf.d/fish-species-api.conf
+
+# 6. Reload Nginx global
 sudo nginx -t && sudo systemctl reload nginx
-
-# SSL otomatis (opsional)
-sudo certbot --nginx -d api.example.com
 ```
 
-Ganti `api.example.com` dengan domain Anda. Container hanya listen di `127.0.0.1:5000` sehingga tidak terbuka langsung ke internet.
+| Item | Nilai |
+|------|-------|
+| Jaringan Docker | `app-bridge` (external) |
+| Container name | `fish_species_api` |
+| Upstream | `fish_species_api:5000` |
+| Upload max | `10M` (sesuai `MAX_UPLOAD_SIZE_MB`) |
+| Proxy timeout | `120s` (sesuai `GUNICORN_TIMEOUT`) |
+
+Tes dari luar:
+
+```bash
+curl http://fish-species.ferxcode.my.id/ready
+curl -X POST http://fish-species.ferxcode.my.id/predict \
+  -H "X-API-Key: your-api-key" \
+  -F "image=@ikan.jpg"
+```
 
 ### Build image manual
 
