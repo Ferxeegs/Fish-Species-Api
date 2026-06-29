@@ -359,7 +359,33 @@ docker compose logs -f
 docker compose down
 ```
 
-API tersedia di `http://localhost:5000`. Endpoint health check: `GET /health`.
+API tersedia di `http://127.0.0.1:5000` (hanya localhost; gunakan Nginx untuk akses publik).
+
+### Nginx Reverse Proxy (server production)
+
+File konfigurasi tersedia di folder `nginx/`:
+
+| File | Kegunaan |
+|------|----------|
+| `nginx/fish-species-api.conf` | HTTPS + redirect HTTP (production) |
+| `nginx/fish-species-api.http.conf` | HTTP saja (sebelum SSL) |
+
+```bash
+# Salin ke Nginx global
+sudo cp nginx/fish-species-api.conf /etc/nginx/sites-available/fish-species-api.conf
+
+# Edit server_name dan path SSL
+sudo nano /etc/nginx/sites-available/fish-species-api.conf
+
+# Aktifkan
+sudo ln -sf /etc/nginx/sites-available/fish-species-api.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# SSL otomatis (opsional)
+sudo certbot --nginx -d api.example.com
+```
+
+Ganti `api.example.com` dengan domain Anda. Container hanya listen di `127.0.0.1:5000` sehingga tidak terbuka langsung ke internet.
 
 ### Build image manual
 
