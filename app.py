@@ -14,8 +14,6 @@ from utils.validators import validate_image_upload
 
 logger = logging.getLogger(__name__)
 
-from config.settings import settings
-
 limiter = Limiter(
     key_func=get_remote_address,
     storage_uri=settings.rate_limit_storage_uri,
@@ -44,14 +42,34 @@ def create_app() -> Flask:
 
     limiter.init_app(app)
 
+    if settings.enable_docs:
+        from routes.docs import register_docs
+
+        register_docs(app)
+        logger.info("API docs enabled at /docs (Swagger UI) and /redoc")
+
     @app.after_request
     def set_security_headers(response):
+        # Swagger UI / ReDoc membutuhkan inline script & style
+        if request.path.startswith("/docs") or request.path == "/redoc":
+            response.headers["X-Frame-Options"] = "SAMEORIGIN"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "img-src 'self' data: https:; "
+                "font-src 'self' data: https://cdn.jsdelivr.net; "
+                "connect-src 'self'"
+            )
+        else:
+            response.headers["X-Frame-Options"] = "DENY"
+
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Cache-Control"] = "no-store"
-        if settings.is_production:
+        if not request.path.startswith("/docs"):
+            response.headers["Cache-Control"] = "no-store"
+        if settings.is_production and not request.path.startswith("/docs"):
             response.headers["Strict-Transport-Security"] = (
                 "max-age=31536000; includeSubDomains"
             )

@@ -3,6 +3,7 @@ gunicorn
 python-dotenv
 flask-cors
 flask-limiter
+flask-swagger-ui
 ultralytics
 numpy<2.0
 pillow

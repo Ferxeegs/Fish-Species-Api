@@ -1,12 +1,47 @@
+# Fish Species API — Docker Compose (profiles: dev | prod)
+#
+# Development (local):
+#   docker compose --profile dev up -d --build
+#   atau: COMPOSE_PROFILES=dev docker compose up -d --build
+#
+# Production (server):
+#   cp .env.production.example .env.production
+#   docker compose --profile prod up -d --build
+#
+# Hentikan:
+#   docker compose --profile dev down
+#   docker compose --profile prod down
+
+x-api-healthcheck: &api-healthcheck
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/ready')"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 90s
+
 services:
-  api:
+  api-dev:
+    profiles: [dev]
+    build: .
+    container_name: fish_species_api_dev
+    ports:
+      - "127.0.0.1:${FLASK_PORT:-5000}:5000"
+    env_file:
+      - .env.development
+    environment:
+      HOME: /tmp
+      YOLO_CONFIG_DIR: /tmp
+    command: ["python", "app.py"]
+    restart: unless-stopped
+    healthcheck: *api-healthcheck
+
+  api-prod:
+    profiles: [prod]
     build: .
     container_name: fish_species_api
     env_file:
-      - .env
+      - .env.production
     environment:
-      FLASK_ENV: production
-      FLASK_DEBUG: "false"
       HOME: /tmp
       YOLO_CONFIG_DIR: /tmp
     restart: unless-stopped
@@ -22,12 +57,7 @@ services:
         limits:
           cpus: "2"
           memory: 2G
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/ready')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 90s
+    healthcheck: *api-healthcheck
 
 networks:
   app-bridge:

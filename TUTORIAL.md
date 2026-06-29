@@ -2,6 +2,10 @@
 
 API REST berbasis Flask untuk mendeteksi dan mengklasifikasi spesies ikan dari gambar menggunakan model **YOLO** (Ultralytics). API ini mengembalikan bounding box, tingkat kepercayaan (confidence), dan nama spesies ikan yang terdeteksi.
 
+> **Untuk developer yang mengintegrasikan API:** lihat [API_GUIDE.md](./API_GUIDE.md) (structured output, validasi JSON, retry, fallback, debugging).
+>
+> **Dokumentasi interaktif (Swagger UI):** `/docs` — mirip FastAPI. ReDoc: `/redoc`. OpenAPI: `/openapi.json`.
+
 ---
 
 ## Daftar Isi
@@ -336,28 +340,67 @@ Jika tidak ada ikan terdeteksi di atas threshold, `predictions` berupa array kos
 
 ## Menjalankan dengan Docker
 
-### Docker Compose (disarankan)
+Proyek ini memakai **satu `docker-compose.yml`** dengan **profile** `dev` dan `prod`:
 
-Pastikan file `model/speciesv4.pt` dan `.env` sudah dikonfigurasi sebelum build.
+| Profile | Service | Environment | Port host | Jaringan |
+|---------|---------|-------------|-----------|----------|
+| `dev` | `api-dev` | `.env.development` | `127.0.0.1:5000` | default |
+| `prod` | `api-prod` | `.env.production` | tidak di-expose | `app-bridge` |
 
-```bash
-cp .env.example .env
-# Edit .env — set SECRET_KEY dan API_KEY
+File env:
+
+| File | Dipakai oleh |
+|------|--------------|
+| `.env.development` | Profile `dev` |
+| `.env.production` | Profile `prod` (buat dari `.env.production.example`) |
+
+Tambahkan di `.env` (root) agar default local pakai dev:
+
+```env
+COMPOSE_PROFILES=dev
 ```
 
+### Development (local)
+
 ```bash
-# Build dan jalankan
+docker compose --profile dev up -d --build
+
+# atau jika COMPOSE_PROFILES=dev sudah di .env:
 docker compose up -d --build
+```
 
-# Cek status container
+Akses:
+
+- API: `http://localhost:5000`
+- Swagger UI: `http://localhost:5000/docs`
+- API key dev: `dev-api-key` (dari `.env.development`)
+
+```bash
+curl http://localhost:5000/ready
+curl -X POST http://localhost:5000/predict \
+  -H "X-API-Key: dev-api-key" \
+  -F "image=@ikan.jpg"
+```
+
+### Production (server)
+
+```bash
+cp .env.production.example .env.production
+# Edit SECRET_KEY & API_KEY di .env.production
+
+docker network create app-bridge 2>/dev/null || true
+docker compose --profile prod up -d --build
+```
+
+### Perintah umum
+
+```bash
 docker compose ps
-
-# Lihat log
 docker compose logs -f
-
-# Hentikan
 docker compose down
 ```
+
+> **Kenapa local tidak jalan sebelumnya?** Config production tidak expose port ke host dan membutuhkan jaringan Docker eksternal `app-bridge` untuk Nginx global. Untuk local, selalu pakai config **dev**.
 
 ### Nginx Global Gateway (conf.d)
 
@@ -372,8 +415,8 @@ docker network create app-bridge 2>/dev/null || true
 # 2. Pastikan container Nginx global sudah join app-bridge
 docker network connect app-bridge <nama-container-nginx-global>
 
-# 3. Jalankan stack API
-docker compose up -d --build
+# 3. Jalankan stack API (production)
+docker compose --profile prod up -d --build
 
 # 4. Salin config ke gateway
 sudo cp nginx/fish-species-api.conf /etc/nginx/conf.d/fish-species-api.conf
@@ -562,21 +605,16 @@ Kemungkinan penyebab:
 ## Ringkasan Cepat
 
 ```bash
-# Docker (production)
-cp .env.example .env   # edit SECRET_KEY & API_KEY
-docker compose up -d --build
+# Local (development)
+docker compose --profile dev up -d --build
 curl http://localhost:5000/ready
 curl -X POST http://localhost:5000/predict \
-  -H "X-API-Key: your-api-key" \
+  -H "X-API-Key: dev-api-key" \
   -F "image=@ikan.jpg"
 
-# Setup lokal
-python -m venv venv
-.\venv\Scripts\Activate.ps1          # Windows
-pip install torch==2.1.0+cpu torchvision==0.16.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements.txt
-python check_model.py
-gunicorn --config gunicorn.conf.py wsgi:app
+# Production (server)
+cp .env.production.example .env.production
+docker compose --profile prod up -d --build
 ```
 
 ---

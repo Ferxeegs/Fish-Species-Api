@@ -71,9 +71,20 @@ class Settings:
 
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
 
+    enable_docs: bool = field(default_factory=lambda: _env_bool("ENABLE_DOCS", True))
+    api_server_url: str = field(
+        default_factory=lambda: os.getenv(
+            "API_SERVER_URL", "https://fish-species.ferxcode.my.id"
+        )
+    )
+
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
+
+    @property
+    def is_development(self) -> bool:
+        return self.flask_env.lower() == "development"
 
     @property
     def is_production(self) -> bool:
